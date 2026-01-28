@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/task.json",
+  "title": "Task",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "title", "frequency", "schedule", "startDate"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the task."
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable title for the task."
+    },
+    "frequency": {
+      "type": "string",
+      "enum": [
+        "daily",
+        "n-times-daily",
+        "days-of-week",
+        "nth-weekday",
+        "day-of-month"
+      ],
+      "description": "High-level frequency for the task schedule."
+    },
+    "schedule": {
+      "description": "Detailed recurrence configuration.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "daily"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "timesPerDay"],
+          "properties": {
+            "type": {
+              "const": "n-times-daily"
+            },
+            "timesPerDay": {
+              "type": "integer",
+              "minimum": 2,
+              "description": "Number of times the task should occur each day."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "days"],
+          "properties": {
+            "type": {
+              "const": "days-of-week"
+            },
+            "days": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "monday",
+                  "tuesday",
+                  "wednesday",
+                  "thursday",
+                  "friday",
+                  "saturday",
+                  "sunday"
+                ]
+              },
+              "description": "Days of the week on which the task occurs."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "weekday", "nth"],
+          "properties": {
+            "type": {
+              "const": "nth-weekday"
+            },
+            "weekday": {
+              "type": "string",
+              "enum": [
+                "monday",
+                "tuesday",
+                "wednesday",
+                "thursday",
+                "friday",
+                "saturday",
+                "sunday"
+              ]
+            },
+            "nth": {
+              "type": "integer",
+              "enum": [1, 2, 3, 4, 5, -1],
+              "description": "Nth occurrence of the weekday in the month. Use -1 for the last occurrence."
+            },
+            "monthInterval": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "description": "Repeat every N months."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "day"],
+          "properties": {
+            "type": {
+              "const": "day-of-month"
+            },
+            "day": {
+              "description": "Day of the month, or 'last' for the final day.",
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31
+                },
+                {
+                  "type": "string",
+                  "const": "last"
+                }
+              ]
+            },
+            "monthInterval": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "description": "Repeat every N months."
+            }
+          }
+        }
+      ]
+    },
+    "startDate": {
+      "type": "string",
+      "format": "date",
+      "description": "ISO-8601 start date for the schedule."
+    },
+    "endDate": {
+      "type": "string",
+      "format": "date",
+      "description": "Optional ISO-8601 end date for the schedule."
+    },
+    "maxOccurrences": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional cap on the number of occurrences."
+    }
+  }
+}
