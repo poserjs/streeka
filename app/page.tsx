@@ -10,6 +10,7 @@ import {
   readTasks,
   writeCompletions,
   writeLastActiveDate,
+  writeTasks,
 } from "../lib/storage";
 import {
   compareDateKeys,
