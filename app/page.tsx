@@ -20,6 +20,7 @@ import {
   isEditableDate,
   parseDateKey,
 } from "../lib/dates";
+import { calculateStreakSummary } from "../lib/streaks";
 
 type DailyCompletion = Record<string, number>;
 
@@ -448,18 +449,10 @@ export default function HomePage() {
     });
   }, [completions, tasks, todayKey]);
 
-  const totalCompletionRate = useMemo(() => {
-    const summary = recentSummaries.reduce<CompletionSummary>(
-      (accumulator, entry) => ({
-        totalOccurrences:
-          accumulator.totalOccurrences + entry.summary.totalOccurrences,
-        completedOccurrences:
-          accumulator.completedOccurrences + entry.summary.completedOccurrences,
-      }),
-      { totalOccurrences: 0, completedOccurrences: 0 },
-    );
-    return getProgressPercentage(summary);
-  }, [recentSummaries]);
+  const streakSummary = useMemo(
+    () => calculateStreakSummary(tasks, completions, todayKey),
+    [tasks, completions, todayKey],
+  );
 
   return (
     <main style={{ padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
@@ -471,6 +464,49 @@ export default function HomePage() {
       {statusMessage ? (
         <p style={{ color: "#2d6a4f" }}>{statusMessage}</p>
       ) : null}
+      <section
+        style={{
+          marginTop: "1.5rem",
+          padding: "1rem",
+          border: "1px solid #e0e0e0",
+          borderRadius: "0.75rem",
+          backgroundColor: "#f8f9fa",
+        }}
+      >
+        <h2 style={{ fontSize: "1rem", marginTop: 0 }}>Summary</h2>
+        <div
+          style={{
+            display: "grid",
+            gap: "0.75rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              Current streak
+            </div>
+            <strong>{streakSummary.currentStreak} days</strong>
+          </div>
+          <div>
+            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              Longest streak
+            </div>
+            <strong>{streakSummary.longestStreak} days</strong>
+          </div>
+          <div>
+            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              Last 7 days completion
+            </div>
+            <strong>{streakSummary.last7DaysCompletion}%</strong>
+          </div>
+          <div>
+            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              Last 30 days completion
+            </div>
+            <strong>{streakSummary.last30DaysCompletion}%</strong>
+          </div>
+        </div>
+      </section>
 
       <nav
         style={{
@@ -1040,7 +1076,7 @@ export default function HomePage() {
               <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
                 Last 7 days completion
               </div>
-              <strong>{totalCompletionRate}%</strong>
+              <strong>{streakSummary.last7DaysCompletion}%</strong>
             </div>
           </div>
           <div style={{ marginTop: "1.5rem" }}>
