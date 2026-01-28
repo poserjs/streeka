@@ -14,12 +14,21 @@ import {
 } from "../lib/storage";
 import {
   compareDateKeys,
+  formatDateKey,
   getTodayKey,
   getYesterdayKey,
   isEditableDate,
+  parseDateKey,
 } from "../lib/dates";
 
 type DailyCompletion = Record<string, number>;
+
+type TabKey = "today" | "yesterday" | "schedule" | "history" | "progress";
+
+type CompletionSummary = {
+  totalOccurrences: number;
+  completedOccurrences: number;
+};
 
 const WEEKDAY_OPTIONS: Array<{ value: Weekday; label: string }> = [
   { value: "monday", label: "Monday" },
@@ -41,6 +50,14 @@ const NTH_WEEK_OPTIONS: Array<{
   { value: 4, label: "Fourth" },
   { value: 5, label: "Fifth" },
   { value: -1, label: "Last" },
+];
+
+const TABS: Array<{ key: TabKey; label: string }> = [
+  { key: "today", label: "Today" },
+  { key: "yesterday", label: "Yesterday" },
+  { key: "schedule", label: "Schedule" },
+  { key: "history", label: "History" },
+  { key: "progress", label: "Progress" },
 ];
 
 const buildDailyCompletion = (
@@ -95,6 +112,32 @@ const describeSchedule = (task: Task): string => {
   }
 };
 
+const buildCompletionSummary = (
+  tasksForDate: Task[],
+  completion: DailyCompletion,
+): CompletionSummary => {
+  return tasksForDate.reduce<CompletionSummary>(
+    (summary, task) => {
+      const occurrences = getOccurrenceCount(task);
+      const completed = Math.min(completion[task.id] ?? 0, occurrences);
+      return {
+        totalOccurrences: summary.totalOccurrences + occurrences,
+        completedOccurrences: summary.completedOccurrences + completed,
+      };
+    },
+    { totalOccurrences: 0, completedOccurrences: 0 },
+  );
+};
+
+const getProgressPercentage = (summary: CompletionSummary): number => {
+  if (summary.totalOccurrences === 0) {
+    return 0;
+  }
+  return Math.round(
+    (summary.completedOccurrences / summary.totalOccurrences) * 100,
+  );
+};
+
 export default function HomePage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completions, setCompletions] = useState<DailyCompletions>({});
@@ -115,6 +158,7 @@ export default function HomePage() {
   const [monthDay, setMonthDay] = useState("1");
   const [monthInterval, setMonthInterval] = useState("1");
   const [extraTaskTitle, setExtraTaskTitle] = useState("");
+  const [activeTab, setActiveTab] = useState<TabKey>("today");
 
   useEffect(() => {
     const storedTasks = readTasks();
@@ -201,6 +245,15 @@ export default function HomePage() {
     }
     return getTasksForDate(tasks, todayKey);
   }, [tasks, todayKey]);
+
+  const yesterdayKey = todayKey ? getYesterdayKey() : "";
+
+  const yesterdayTasks = useMemo(() => {
+    if (!yesterdayKey) {
+      return [];
+    }
+    return getTasksForDate(tasks, yesterdayKey);
+  }, [tasks, yesterdayKey]);
 
   const updateCompletionForDate = (
     dateKey: string,
@@ -352,7 +405,61 @@ export default function HomePage() {
     );
   };
 
-  const todayCompletion = completions[todayKey] ?? {};
+  const todayCompletion = useMemo(
+    () => completions[todayKey] ?? {},
+    [completions, todayKey],
+  );
+  const yesterdayCompletion = useMemo(
+    () => completions[yesterdayKey] ?? {},
+    [completions, yesterdayKey],
+  );
+
+  const todaySummary = useMemo(
+    () => buildCompletionSummary(todayTasks, todayCompletion),
+    [todayTasks, todayCompletion],
+  );
+
+  const yesterdaySummary = useMemo(
+    () => buildCompletionSummary(yesterdayTasks, yesterdayCompletion),
+    [yesterdayTasks, yesterdayCompletion],
+  );
+
+  const recentSummaries = useMemo(() => {
+    if (!todayKey) {
+      return [] as Array<{ dateKey: string; summary: CompletionSummary }>;
+    }
+    const todayDate = parseDateKey(todayKey);
+    if (!todayDate) {
+      return [] as Array<{ dateKey: string; summary: CompletionSummary }>;
+    }
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    return Array.from({ length: 7 }, (_, index) => {
+      const dateKey = formatDateKey(
+        new Date(todayDate.getTime() - index * msPerDay),
+      );
+      return {
+        dateKey,
+        summary: buildCompletionSummary(
+          getTasksForDate(tasks, dateKey),
+          completions[dateKey] ?? {},
+        ),
+      };
+    });
+  }, [completions, tasks, todayKey]);
+
+  const totalCompletionRate = useMemo(() => {
+    const summary = recentSummaries.reduce<CompletionSummary>(
+      (accumulator, entry) => ({
+        totalOccurrences:
+          accumulator.totalOccurrences + entry.summary.totalOccurrences,
+        completedOccurrences:
+          accumulator.completedOccurrences + entry.summary.completedOccurrences,
+      }),
+      { totalOccurrences: 0, completedOccurrences: 0 },
+    );
+    return getProgressPercentage(summary);
+  }, [recentSummaries]);
 
   return (
     <main style={{ padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
@@ -364,355 +471,604 @@ export default function HomePage() {
       {statusMessage ? (
         <p style={{ color: "#2d6a4f" }}>{statusMessage}</p>
       ) : null}
-      <section style={{ marginTop: "1.5rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Create a task</h2>
-        <form
-          onSubmit={handleCreateTask}
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            maxWidth: "500px",
-          }}
-        >
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            Task title
-            <input
-              type="text"
-              value={taskTitle}
-              onChange={(event) => setTaskTitle(event.target.value)}
-              placeholder="e.g. Stretching"
-              required
-            />
-          </label>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            Start date
-            <input
-              type="date"
-              value={taskStartDate}
-              onChange={(event) => setTaskStartDate(event.target.value)}
-              required
-            />
-          </label>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            End date (optional)
-            <input
-              type="date"
-              value={taskEndDate}
-              onChange={(event) => setTaskEndDate(event.target.value)}
-            />
-          </label>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            Max occurrences (optional)
-            <input
-              type="number"
-              min={1}
-              value={taskMaxOccurrences}
-              onChange={(event) => setTaskMaxOccurrences(event.target.value)}
-              placeholder="Leave blank for unlimited"
-            />
-          </label>
-          <label style={{ display: "grid", gap: "0.35rem" }}>
-            Recurrence
-            <select
-              value={scheduleType}
-              onChange={(event) =>
-                setScheduleType(event.target.value as TaskSchedule["type"])
-              }
+
+      <nav
+        style={{
+          display: "flex",
+          gap: "0.75rem",
+          flexWrap: "wrap",
+          marginTop: "1.5rem",
+        }}
+      >
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: "0.5rem 1rem",
+              borderRadius: "999px",
+              border: "1px solid #ced4da",
+              backgroundColor: activeTab === tab.key ? "#2d6a4f" : "#f8f9fa",
+              color: activeTab === tab.key ? "#ffffff" : "#212529",
+              fontWeight: activeTab === tab.key ? 600 : 400,
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {activeTab === "today" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2 style={{ fontSize: "1.1rem" }}>Today</h2>
+          <div
+            style={{
+              display: "grid",
+              gap: "0.5rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              marginBottom: "1rem",
+            }}
+          >
+            <div
+              style={{
+                padding: "0.75rem",
+                border: "1px solid #e0e0e0",
+                borderRadius: "0.75rem",
+              }}
             >
-              <option value="daily">Daily</option>
-              <option value="n-times-daily">Multiple times per day</option>
-              <option value="days-of-week">Specific weekdays</option>
-              <option value="nth-weekday">Nth weekday of month</option>
-              <option value="day-of-month">Day of month</option>
-            </select>
-          </label>
-          {scheduleType === "n-times-daily" ? (
-            <label style={{ display: "grid", gap: "0.35rem" }}>
-              Times per day
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                Completion
+              </div>
+              <strong>{getProgressPercentage(todaySummary)}%</strong>
+            </div>
+            <div
+              style={{
+                padding: "0.75rem",
+                border: "1px solid #e0e0e0",
+                borderRadius: "0.75rem",
+              }}
+            >
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                Tasks scheduled
+              </div>
+              <strong>{todayTasks.length}</strong>
+            </div>
+          </div>
+          <form
+            onSubmit={handleAddExtraTask}
+            style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
+          >
+            <label style={{ display: "flex", flexDirection: "column" }}>
+              Extra task for today only
               <input
-                type="number"
-                min={1}
-                value={timesPerDay}
-                onChange={(event) => setTimesPerDay(Number(event.target.value))}
+                type="text"
+                value={extraTaskTitle}
+                onChange={(event) => setExtraTaskTitle(event.target.value)}
+                placeholder="Add a one-time task"
               />
             </label>
-          ) : null}
-          {scheduleType === "days-of-week" ? (
-            <fieldset
-              style={{ border: "1px solid #e0e0e0", padding: "0.75rem" }}
-            >
-              <legend>Select weekdays</legend>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                  gap: "0.5rem",
-                }}
-              >
-                {WEEKDAY_OPTIONS.map((option) => (
-                  <label
-                    key={option.value}
+            <button type="submit">Add extra</button>
+          </form>
+          {todayTasks.length === 0 ? (
+            <p>No tasks scheduled for today.</p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, marginTop: "0.75rem" }}>
+              {todayTasks.map((task) => {
+                const occurrences = getOccurrenceCount(task);
+                const completed = todayCompletion[task.id] ?? 0;
+
+                return (
+                  <li
+                    key={task.id}
                     style={{
-                      display: "flex",
-                      gap: "0.35rem",
-                      alignItems: "center",
+                      display: "grid",
+                      gap: "0.5rem",
+                      padding: "0.75rem 0",
+                      borderBottom: "1px solid #e0e0e0",
                     }}
                   >
-                    <input
-                      type="checkbox"
-                      checked={weekdays.includes(option.value)}
-                      onChange={() => toggleWeekday(option.value)}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-          ) : null}
-          {scheduleType === "nth-weekday" ? (
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                Week of month
-                <select
-                  value={nthWeek}
-                  onChange={(event) =>
-                    setNthWeek(
-                      Number(event.target.value) as 1 | 2 | 3 | 4 | 5 | -1,
-                    )
-                  }
-                >
-                  {NTH_WEEK_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                Weekday
-                <select
-                  value={nthWeekday}
-                  onChange={(event) =>
-                    setNthWeekday(event.target.value as Weekday)
-                  }
-                >
-                  {WEEKDAY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                Month interval
-                <input
-                  type="number"
-                  min={1}
-                  value={nthMonthInterval}
-                  onChange={(event) => setNthMonthInterval(event.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
-          {scheduleType === "day-of-month" ? (
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                Day of month
-                <select
-                  value={monthDay}
-                  onChange={(event) => setMonthDay(event.target.value)}
-                >
-                  {Array.from({ length: 28 }, (_, index) => index + 1).map(
-                    (day) => (
-                      <option key={day} value={day}>
-                        {day}
-                      </option>
-                    ),
-                  )}
-                  <option value="last">Last day</option>
-                </select>
-              </label>
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                Month interval
-                <input
-                  type="number"
-                  min={1}
-                  value={monthInterval}
-                  onChange={(event) => setMonthInterval(event.target.value)}
-                />
-              </label>
-            </div>
-          ) : null}
-          <button type="submit" style={{ width: "fit-content" }}>
-            Add task
-          </button>
-        </form>
-      </section>
-      <section style={{ marginTop: "1.5rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Today</h2>
-        <form
-          onSubmit={handleAddExtraTask}
-          style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
-        >
-          <label style={{ display: "flex", flexDirection: "column" }}>
-            Extra task for today only
-            <input
-              type="text"
-              value={extraTaskTitle}
-              onChange={(event) => setExtraTaskTitle(event.target.value)}
-              placeholder="Add a one-time task"
-            />
-          </label>
-          <button type="submit">Add extra</button>
-        </form>
-        {todayTasks.length === 0 ? (
-          <p>No tasks scheduled for today.</p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, marginTop: "0.75rem" }}>
-            {todayTasks.map((task) => {
-              const occurrences = getOccurrenceCount(task);
-              const completed = todayCompletion[task.id] ?? 0;
+                    <div>
+                      <strong>{task.title}</strong>
+                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                        {describeSchedule(task)}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {Array.from({ length: occurrences }, (_, index) => {
+                        const checkboxId = `${task.id}-occurrence-${index}`;
+                        const isChecked = index < completed;
+                        return (
+                          <label
+                            key={checkboxId}
+                            htmlFor={checkboxId}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.35rem",
+                            }}
+                          >
+                            <input
+                              id={checkboxId}
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={!isEditableDate(todayKey, todayKey)}
+                              onChange={(event) =>
+                                updateCompletionForDate(
+                                  todayKey,
+                                  task.id,
+                                  event.target.checked ? index + 1 : index,
+                                )
+                              }
+                            />
+                            {occurrences > 1 ? `#${index + 1}` : "Done"}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
-              return (
+      {activeTab === "yesterday" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2 style={{ fontSize: "1.1rem" }}>Yesterday</h2>
+          {yesterdayKey ? (
+            <p style={{ color: "#6c757d" }}>Date: {yesterdayKey}</p>
+          ) : null}
+          {yesterdayTasks.length === 0 ? (
+            <p>No tasks scheduled for yesterday.</p>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0 }}>
+              {yesterdayTasks.map((task) => (
                 <li
                   key={task.id}
                   style={{
-                    display: "grid",
-                    gap: "0.5rem",
-                    padding: "0.75rem 0",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    padding: "0.5rem 0",
                     borderBottom: "1px solid #e0e0e0",
                   }}
                 >
-                  <div>
+                  <div style={{ flex: 1 }}>
+                    <strong>{task.title}</strong>
+                    <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                      Schedule: {describeSchedule(task)}
+                    </div>
+                  </div>
+                  <label style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "0.85rem" }}>Completions</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={yesterdayCompletion[task.id] ?? 0}
+                      onChange={(event) =>
+                        updateCompletionForDate(
+                          yesterdayKey,
+                          task.id,
+                          Number(event.target.value),
+                        )
+                      }
+                      disabled={!isEditableDate(yesterdayKey, todayKey)}
+                      style={{ width: "90px" }}
+                    />
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+          {!isEditableDate(yesterdayKey, todayKey) ? (
+            <p style={{ color: "#9b2226", marginTop: "0.75rem" }}>
+              Updates are locked for dates older than yesterday.
+            </p>
+          ) : null}
+          {yesterdayTasks.length ? (
+            <p style={{ marginTop: "0.75rem", color: "#6c757d" }}>
+              Completion: {getProgressPercentage(yesterdaySummary)}%
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {activeTab === "schedule" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2 style={{ fontSize: "1.1rem" }}>Schedule</h2>
+          <form
+            onSubmit={handleCreateTask}
+            style={{
+              display: "grid",
+              gap: "0.75rem",
+              maxWidth: "500px",
+            }}
+          >
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              Task title
+              <input
+                type="text"
+                value={taskTitle}
+                onChange={(event) => setTaskTitle(event.target.value)}
+                placeholder="e.g. Stretching"
+                required
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              Start date
+              <input
+                type="date"
+                value={taskStartDate}
+                onChange={(event) => setTaskStartDate(event.target.value)}
+                required
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              End date (optional)
+              <input
+                type="date"
+                value={taskEndDate}
+                onChange={(event) => setTaskEndDate(event.target.value)}
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              Max occurrences (optional)
+              <input
+                type="number"
+                min={1}
+                value={taskMaxOccurrences}
+                onChange={(event) => setTaskMaxOccurrences(event.target.value)}
+                placeholder="Leave blank for unlimited"
+              />
+            </label>
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              Recurrence
+              <select
+                value={scheduleType}
+                onChange={(event) =>
+                  setScheduleType(event.target.value as TaskSchedule["type"])
+                }
+              >
+                <option value="daily">Daily</option>
+                <option value="n-times-daily">Multiple times per day</option>
+                <option value="days-of-week">Specific weekdays</option>
+                <option value="nth-weekday">Nth weekday of month</option>
+                <option value="day-of-month">Day of month</option>
+              </select>
+            </label>
+            {scheduleType === "n-times-daily" ? (
+              <label style={{ display: "grid", gap: "0.35rem" }}>
+                Times per day
+                <input
+                  type="number"
+                  min={1}
+                  value={timesPerDay}
+                  onChange={(event) =>
+                    setTimesPerDay(Number(event.target.value))
+                  }
+                />
+              </label>
+            ) : null}
+            {scheduleType === "days-of-week" ? (
+              <fieldset
+                style={{ border: "1px solid #e0e0e0", padding: "0.75rem" }}
+              >
+                <legend>Select weekdays</legend>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                    gap: "0.5rem",
+                  }}
+                >
+                  {WEEKDAY_OPTIONS.map((option) => (
+                    <label
+                      key={option.value}
+                      style={{
+                        display: "flex",
+                        gap: "0.35rem",
+                        alignItems: "center",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={weekdays.includes(option.value)}
+                        onChange={() => toggleWeekday(option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            ) : null}
+            {scheduleType === "nth-weekday" ? (
+              <div style={{ display: "grid", gap: "0.5rem" }}>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  Week of month
+                  <select
+                    value={nthWeek}
+                    onChange={(event) =>
+                      setNthWeek(
+                        Number(event.target.value) as 1 | 2 | 3 | 4 | 5 | -1,
+                      )
+                    }
+                  >
+                    {NTH_WEEK_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  Weekday
+                  <select
+                    value={nthWeekday}
+                    onChange={(event) =>
+                      setNthWeekday(event.target.value as Weekday)
+                    }
+                  >
+                    {WEEKDAY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  Month interval
+                  <input
+                    type="number"
+                    min={1}
+                    value={nthMonthInterval}
+                    onChange={(event) =>
+                      setNthMonthInterval(event.target.value)
+                    }
+                  />
+                </label>
+              </div>
+            ) : null}
+            {scheduleType === "day-of-month" ? (
+              <div style={{ display: "grid", gap: "0.5rem" }}>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  Day of month
+                  <select
+                    value={monthDay}
+                    onChange={(event) => setMonthDay(event.target.value)}
+                  >
+                    {Array.from({ length: 28 }, (_, index) => index + 1).map(
+                      (day) => (
+                        <option key={day} value={day}>
+                          {day}
+                        </option>
+                      ),
+                    )}
+                    <option value="last">Last day</option>
+                  </select>
+                </label>
+                <label style={{ display: "grid", gap: "0.35rem" }}>
+                  Month interval
+                  <input
+                    type="number"
+                    min={1}
+                    value={monthInterval}
+                    onChange={(event) => setMonthInterval(event.target.value)}
+                  />
+                </label>
+              </div>
+            ) : null}
+            <button type="submit" style={{ width: "fit-content" }}>
+              Add task
+            </button>
+          </form>
+          <div style={{ marginTop: "1.5rem" }}>
+            <h3 style={{ fontSize: "1rem" }}>All scheduled tasks</h3>
+            {tasks.length === 0 ? (
+              <p>No tasks yet. Add your first habit above.</p>
+            ) : (
+              <ul style={{ listStyle: "none", padding: 0 }}>
+                {tasks.map((task) => (
+                  <li
+                    key={task.id}
+                    style={{
+                      padding: "0.75rem 0",
+                      borderBottom: "1px solid #e0e0e0",
+                    }}
+                  >
                     <strong>{task.title}</strong>
                     <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
                       {describeSchedule(task)}
                     </div>
-                  </div>
-                  <div
-                    style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}
-                  >
-                    {Array.from({ length: occurrences }, (_, index) => {
-                      const checkboxId = `${task.id}-occurrence-${index}`;
-                      const isChecked = index < completed;
-                      return (
-                        <label
-                          key={checkboxId}
-                          htmlFor={checkboxId}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "0.35rem",
-                          }}
-                        >
-                          <input
-                            id={checkboxId}
-                            type="checkbox"
-                            checked={isChecked}
-                            disabled={!isEditableDate(todayKey, todayKey)}
-                            onChange={(event) =>
-                              updateCompletionForDate(
-                                todayKey,
-                                task.id,
-                                event.target.checked ? index + 1 : index,
-                              )
-                            }
-                          />
-                          {occurrences > 1 ? `#${index + 1}` : "Done"}
-                        </label>
-                      );
-                    })}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-      <section style={{ marginTop: "1.5rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Progress history</h2>
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-          <button type="button" onClick={() => setSelectedDateKey(todayKey)}>
-            Today
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedDateKey(getYesterdayKey())}
+                    <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                      Active from {task.startDate}
+                      {task.endDate ? ` to ${task.endDate}` : ""}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "history" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2 style={{ fontSize: "1.1rem" }}>History</h2>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button type="button" onClick={() => setSelectedDateKey(todayKey)}>
+              Today
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDateKey(getYesterdayKey())}
+            >
+              Yesterday
+            </button>
+          </div>
+          <label
+            htmlFor="date-select"
+            style={{ display: "block", marginTop: "0.75rem" }}
           >
-            Yesterday
-          </button>
-        </div>
-        <label
-          htmlFor="date-select"
-          style={{ display: "block", marginTop: "0.75rem" }}
-        >
-          Review date
-        </label>
-        <select
-          id="date-select"
-          value={selectedDateKey}
-          onChange={(event) => setSelectedDateKey(event.target.value)}
-          style={{ marginTop: "0.5rem", minWidth: "200px" }}
-        >
-          {availableDateKeys.map((dateKey) => (
-            <option key={dateKey} value={dateKey}>
-              {dateKey}
-              {dateKey === todayKey ? " (today)" : ""}
-              {todayKey && dateKey === getYesterdayKey() ? " (yesterday)" : ""}
-            </option>
-          ))}
-        </select>
-        {!editable && selectedDateKey ? (
-          <p style={{ color: "#9b2226", marginTop: "0.75rem" }}>
-            Updates are locked for dates older than yesterday.
-          </p>
-        ) : null}
-      </section>
-      <section style={{ marginTop: "1.5rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Tasks for {selectedDateKey}</h2>
-        {tasksForSelectedDate.length === 0 ? (
-          <p>No tasks scheduled for this date.</p>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0 }}>
-            {tasksForSelectedDate.map((task) => (
-              <li
-                key={task.id}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  padding: "0.5rem 0",
-                  borderBottom: "1px solid #e0e0e0",
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <strong>{task.title}</strong>
-                  <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
-                    Schedule: {describeSchedule(task)}
-                  </div>
-                </div>
-                <label style={{ display: "flex", flexDirection: "column" }}>
-                  <span style={{ fontSize: "0.85rem" }}>Completions</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={selectedCompletion[task.id] ?? 0}
-                    onChange={(event) =>
-                      updateCompletionForDate(
-                        selectedDateKey,
-                        task.id,
-                        Number(event.target.value),
-                      )
-                    }
-                    disabled={!editable}
-                    style={{ width: "90px" }}
-                  />
-                </label>
-              </li>
+            Review date
+          </label>
+          <select
+            id="date-select"
+            value={selectedDateKey}
+            onChange={(event) => setSelectedDateKey(event.target.value)}
+            style={{ marginTop: "0.5rem", minWidth: "200px" }}
+          >
+            {availableDateKeys.map((dateKey) => (
+              <option key={dateKey} value={dateKey}>
+                {dateKey}
+                {dateKey === todayKey ? " (today)" : ""}
+                {todayKey && dateKey === getYesterdayKey()
+                  ? " (yesterday)"
+                  : ""}
+              </option>
             ))}
-          </ul>
-        )}
-      </section>
+          </select>
+          {!editable && selectedDateKey ? (
+            <p style={{ color: "#9b2226", marginTop: "0.75rem" }}>
+              Updates are locked for dates older than yesterday.
+            </p>
+          ) : null}
+          <div style={{ marginTop: "1.5rem" }}>
+            <h3 style={{ fontSize: "1rem" }}>Tasks for {selectedDateKey}</h3>
+            {tasksForSelectedDate.length === 0 ? (
+              <p>No tasks scheduled for this date.</p>
+            ) : (
+              <ul style={{ listStyle: "none", padding: 0 }}>
+                {tasksForSelectedDate.map((task) => (
+                  <li
+                    key={task.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.75rem",
+                      padding: "0.5rem 0",
+                      borderBottom: "1px solid #e0e0e0",
+                    }}
+                  >
+                    <div style={{ flex: 1 }}>
+                      <strong>{task.title}</strong>
+                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                        Schedule: {describeSchedule(task)}
+                      </div>
+                    </div>
+                    <label style={{ display: "flex", flexDirection: "column" }}>
+                      <span style={{ fontSize: "0.85rem" }}>Completions</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={selectedCompletion[task.id] ?? 0}
+                        onChange={(event) =>
+                          updateCompletionForDate(
+                            selectedDateKey,
+                            task.id,
+                            Number(event.target.value),
+                          )
+                        }
+                        disabled={!editable}
+                        style={{ width: "90px" }}
+                      />
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      ) : null}
+
+      {activeTab === "progress" ? (
+        <section style={{ marginTop: "1.5rem" }}>
+          <h2 style={{ fontSize: "1.1rem" }}>Progress</h2>
+          <div
+            style={{
+              display: "grid",
+              gap: "0.75rem",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            }}
+          >
+            <div
+              style={{
+                padding: "0.75rem",
+                border: "1px solid #e0e0e0",
+                borderRadius: "0.75rem",
+              }}
+            >
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                Today completion
+              </div>
+              <strong>{getProgressPercentage(todaySummary)}%</strong>
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                {todaySummary.completedOccurrences} of{" "}
+                {todaySummary.totalOccurrences}
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "0.75rem",
+                border: "1px solid #e0e0e0",
+                borderRadius: "0.75rem",
+              }}
+            >
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                Yesterday completion
+              </div>
+              <strong>{getProgressPercentage(yesterdaySummary)}%</strong>
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                {yesterdaySummary.completedOccurrences} of{" "}
+                {yesterdaySummary.totalOccurrences}
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "0.75rem",
+                border: "1px solid #e0e0e0",
+                borderRadius: "0.75rem",
+              }}
+            >
+              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                Last 7 days completion
+              </div>
+              <strong>{totalCompletionRate}%</strong>
+            </div>
+          </div>
+          <div style={{ marginTop: "1.5rem" }}>
+            <h3 style={{ fontSize: "1rem" }}>Recent days</h3>
+            <ul style={{ listStyle: "none", padding: 0 }}>
+              {recentSummaries.map((entry) => (
+                <li
+                  key={entry.dateKey}
+                  style={{
+                    padding: "0.5rem 0",
+                    borderBottom: "1px solid #e0e0e0",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "1rem",
+                  }}
+                >
+                  <span>{entry.dateKey}</span>
+                  <span style={{ color: "#6c757d" }}>
+                    {getProgressPercentage(entry.summary)}% (
+                    {entry.summary.completedOccurrences}/
+                    {entry.summary.totalOccurrences})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
