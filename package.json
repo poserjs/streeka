@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npx next dev",
-    "build": "npx next build",
-    "start": "npx next start",
-    "lint": "npx next lint",
+    "dev": "npx --no-install next dev",
+    "build": "npx --no-install next build",
+    "start": "npx --no-install next start",
+    "lint": "npx --no-install next lint",
     "test": "node --test",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
