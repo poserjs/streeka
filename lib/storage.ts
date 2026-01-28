@@ -15,6 +15,7 @@ type StoredCompletionsV1 = {
 
 const TASKS_STORAGE_KEY = "streeka.tasks";
 const COMPLETIONS_STORAGE_KEY = "streeka.completions";
+const LAST_ACTIVE_DATE_KEY = "streeka.lastActiveDate";
 
 const CURRENT_TASKS_VERSION = 1;
 const CURRENT_COMPLETIONS_VERSION = 1;
@@ -208,4 +209,27 @@ export const writeCompletions = (completions: DailyCompletions): void => {
   };
 
   storage.setItem(COMPLETIONS_STORAGE_KEY, JSON.stringify(payload));
+};
+
+export const readLastActiveDate = (): string | null => {
+  const storage = getStorage();
+  if (!storage) {
+    return null;
+  }
+
+  const value = storage.getItem(LAST_ACTIVE_DATE_KEY);
+  if (!value) {
+    return null;
+  }
+
+  return value;
+};
+
+export const writeLastActiveDate = (dateKey: string): void => {
+  const storage = getStorage();
+  if (!storage) {
+    return;
+  }
+
+  storage.setItem(LAST_ACTIVE_DATE_KEY, dateKey);
 };
