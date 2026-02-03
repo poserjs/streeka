@@ -1,7 +1,7 @@
 import type { Task } from "../types/task";
 import { formatDateKey, parseDateKey } from "./dates";
 import type { DailyCompletions } from "./storage";
-import { getTasksForDate } from "./recurrence";
+import { getTaskTimesPerDay, getTasksForDate } from "./recurrence";
 
 type CompletionSummary = {
   totalOccurrences: number;
@@ -17,10 +17,7 @@ export type StreakSummary = {
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const getOccurrenceCount = (task: Task): number =>
-  task.schedule.type === "n-times-daily"
-    ? Math.max(1, task.schedule.timesPerDay)
-    : 1;
+const getOccurrenceCount = (task: Task): number => getTaskTimesPerDay(task);
 
 const buildCompletionSummary = (
   tasksForDate: Task[],

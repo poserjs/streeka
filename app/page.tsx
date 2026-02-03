@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { Task, TaskSchedule, Weekday } from "../types/task";
-import { getTasksForDate } from "../lib/recurrence";
+import { getTaskTimesPerDay, getTasksForDate } from "../lib/recurrence";
 import type { DailyCompletions } from "../lib/storage";
 import {
   readCompletions,
@@ -70,10 +70,12 @@ const buildDailyCompletion = (
   );
 };
 
-const getOccurrenceCount = (task: Task): number =>
-  task.schedule.type === "n-times-daily"
-    ? Math.max(1, task.schedule.timesPerDay)
-    : 1;
+const getOccurrenceCount = (task: Task): number => getTaskTimesPerDay(task);
+
+const formatTimesPerDay = (task: Task): string => {
+  const times = getTaskTimesPerDay(task);
+  return times > 1 ? `${times}x per day` : "";
+};
 
 const describeSchedule = (task: Task): string => {
   if (task.endDate && task.startDate === task.endDate) {
@@ -81,16 +83,18 @@ const describeSchedule = (task: Task): string => {
   }
 
   const { schedule } = task;
+  const timesPerDayLabel = formatTimesPerDay(task);
+  const timesSuffix = timesPerDayLabel ? ` · ${timesPerDayLabel}` : "";
 
   switch (schedule.type) {
     case "daily":
-      return "Daily";
+      return `Daily${timesSuffix}`;
     case "n-times-daily":
-      return `${schedule.timesPerDay} times per day`;
+      return `Daily${timesSuffix}`;
     case "days-of-week":
       return `Every ${schedule.days
         .map((day) => day[0].toUpperCase() + day.slice(1))
-        .join(", ")}`;
+        .join(", ")}${timesSuffix}`;
     case "nth-weekday":
       return `${
         NTH_WEEK_OPTIONS.find((option) => option.value === schedule.nth)
@@ -99,7 +103,7 @@ const describeSchedule = (task: Task): string => {
         schedule.monthInterval && schedule.monthInterval > 1
           ? ` every ${schedule.monthInterval} months`
           : ""
-      }`;
+      }${timesSuffix}`;
     case "day-of-month":
       return `Day ${
         schedule.day === "last" ? "last" : schedule.day
@@ -107,7 +111,7 @@ const describeSchedule = (task: Task): string => {
         schedule.monthInterval && schedule.monthInterval > 1
           ? ` every ${schedule.monthInterval} months`
           : ""
-      }`;
+      }${timesSuffix}`;
     default:
       return "Custom schedule";
   }
@@ -159,6 +163,9 @@ export default function HomePage() {
   const [monthDay, setMonthDay] = useState("1");
   const [monthInterval, setMonthInterval] = useState("1");
   const [extraTaskTitle, setExtraTaskTitle] = useState("");
+  const [taskEdits, setTaskEdits] = useState<
+    Record<string, { title: string; timesPerDay: string }>
+  >({});
   const [activeTab, setActiveTab] = useState<TabKey>("today");
 
   useEffect(() => {
@@ -319,12 +326,134 @@ export default function HomePage() {
     });
   };
 
-  const buildSchedule = (): TaskSchedule => {
+  const getTaskDraft = (task: Task): { title: string; timesPerDay: string } =>
+    taskEdits[task.id] ?? {
+      title: task.title,
+      timesPerDay: String(getTaskTimesPerDay(task)),
+    };
+
+  const updateTaskDraft = (
+    taskId: string,
+    updates: Partial<{ title: string; timesPerDay: string }>,
+  ) => {
+    setTaskEdits((prev) => {
+      const baseTask = tasks.find((task) => task.id === taskId);
+      const current = prev[taskId] ?? {
+        title: baseTask?.title ?? "",
+        timesPerDay: String(baseTask ? getTaskTimesPerDay(baseTask) : 1),
+      };
+      return {
+        ...prev,
+        [taskId]: {
+          ...current,
+          ...updates,
+        },
+      };
+    });
+  };
+
+  const updateTask = (
+    taskId: string,
+    updates: { title?: string; timesPerDay?: number },
+  ) => {
+    setTasks((prev) => {
+      const next = prev.map((task) => {
+        if (task.id !== taskId) {
+          return task;
+        }
+
+        const nextTask: Task = {
+          ...task,
+          ...(updates.title !== undefined ? { title: updates.title } : {}),
+          ...(updates.timesPerDay !== undefined
+            ? { timesPerDay: updates.timesPerDay }
+            : {}),
+        };
+
+        if (
+          updates.timesPerDay !== undefined &&
+          nextTask.schedule.type === "n-times-daily"
+        ) {
+          nextTask.schedule = {
+            ...nextTask.schedule,
+            timesPerDay: updates.timesPerDay,
+          };
+        }
+
+        return nextTask;
+      });
+      writeTasks(next);
+      return next;
+    });
+  };
+
+  const saveTaskEdits = (task: Task) => {
+    const draft = getTaskDraft(task);
+    const nextTitle = draft.title.trim();
+    if (!nextTitle) {
+      setStatusMessage("Task title cannot be empty.");
+      return;
+    }
+
+    const nextTimesPerDay = Math.max(1, Number(draft.timesPerDay) || 1);
+    updateTask(task.id, {
+      title: nextTitle,
+      timesPerDay: nextTimesPerDay,
+    });
+
+    setTaskEdits((prev) => {
+      const next = { ...prev };
+      delete next[task.id];
+      return next;
+    });
+    setStatusMessage("Task updated.");
+  };
+
+  const removeTask = (taskId: string) => {
+    setTasks((prev) => {
+      const next = prev.filter((task) => task.id !== taskId);
+      writeTasks(next);
+      return next;
+    });
+
+    setCompletions((prev) => {
+      let updated = false;
+      const next = Object.fromEntries(
+        Object.entries(prev).map(([dateKey, completion]) => {
+          if (!Object.prototype.hasOwnProperty.call(completion, taskId)) {
+            return [dateKey, completion] as const;
+          }
+          const { [taskId]: _, ...rest } = completion;
+          updated = true;
+          return [dateKey, rest] as const;
+        }),
+      );
+
+      if (updated) {
+        writeCompletions(next);
+        return next;
+      }
+
+      return prev;
+    });
+
+    setTaskEdits((prev) => {
+      if (!prev[taskId]) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
+    setStatusMessage("Task removed.");
+  };
+
+  const buildSchedule = (timesPerDayValue: number): TaskSchedule => {
     switch (scheduleType) {
       case "n-times-daily":
         return {
           type: "n-times-daily",
-          timesPerDay: Math.max(1, Number(timesPerDay) || 1),
+          timesPerDay: timesPerDayValue,
         };
       case "days-of-week":
         return {
@@ -359,12 +488,14 @@ export default function HomePage() {
       return;
     }
 
-    const schedule = buildSchedule();
+    const normalizedTimesPerDay = Math.max(1, Number(timesPerDay) || 1);
+    const schedule = buildSchedule(normalizedTimesPerDay);
     const task: Task = {
       id: crypto.randomUUID(),
       title: taskTitle.trim(),
       frequency: schedule.type,
       schedule,
+      timesPerDay: normalizedTimesPerDay,
       startDate: taskStartDate,
       endDate: taskEndDate || undefined,
       maxOccurrences: taskMaxOccurrences
@@ -391,6 +522,7 @@ export default function HomePage() {
       title: extraTaskTitle.trim(),
       frequency: "daily",
       schedule: { type: "daily" },
+      timesPerDay: 1,
       startDate: todayKey,
       endDate: todayKey,
     };
@@ -696,6 +828,7 @@ export default function HomePage() {
                           Number(event.target.value),
                         )
                       }
+                      onFocus={(event) => event.target.select()}
                       disabled={!isEditableDate(yesterdayKey, todayKey)}
                       style={{ width: "90px" }}
                     />
@@ -774,25 +907,20 @@ export default function HomePage() {
                 }
               >
                 <option value="daily">Daily</option>
-                <option value="n-times-daily">Multiple times per day</option>
                 <option value="days-of-week">Specific weekdays</option>
                 <option value="nth-weekday">Nth weekday of month</option>
                 <option value="day-of-month">Day of month</option>
               </select>
             </label>
-            {scheduleType === "n-times-daily" ? (
-              <label style={{ display: "grid", gap: "0.35rem" }}>
-                Times per day
-                <input
-                  type="number"
-                  min={1}
-                  value={timesPerDay}
-                  onChange={(event) =>
-                    setTimesPerDay(Number(event.target.value))
-                  }
-                />
-              </label>
-            ) : null}
+            <label style={{ display: "grid", gap: "0.35rem" }}>
+              Times per day
+              <input
+                type="number"
+                min={1}
+                value={timesPerDay}
+                onChange={(event) => setTimesPerDay(Number(event.target.value))}
+              />
+            </label>
             {scheduleType === "days-of-week" ? (
               <fieldset
                 style={{ border: "1px solid #e0e0e0", padding: "0.75rem" }}
@@ -911,24 +1039,93 @@ export default function HomePage() {
               <p>No tasks yet. Add your first habit above.</p>
             ) : (
               <ul style={{ listStyle: "none", padding: 0 }}>
-                {tasks.map((task) => (
-                  <li
-                    key={task.id}
-                    style={{
-                      padding: "0.75rem 0",
-                      borderBottom: "1px solid #e0e0e0",
-                    }}
-                  >
-                    <strong>{task.title}</strong>
-                    <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
-                      {describeSchedule(task)}
-                    </div>
-                    <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
-                      Active from {task.startDate}
-                      {task.endDate ? ` to ${task.endDate}` : ""}
-                    </div>
-                  </li>
-                ))}
+                {tasks.map((task) => {
+                  const draft = getTaskDraft(task);
+                  const draftTimes = Math.max(
+                    1,
+                    Number(draft.timesPerDay) || 1,
+                  );
+                  const currentTimes = getTaskTimesPerDay(task);
+                  const hasChanges =
+                    draft.title.trim() !== task.title ||
+                    draftTimes !== currentTimes;
+
+                  return (
+                    <li
+                      key={task.id}
+                      style={{
+                        padding: "0.75rem 0",
+                        borderBottom: "1px solid #e0e0e0",
+                        display: "grid",
+                        gap: "0.5rem",
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "grid",
+                          gap: "0.5rem",
+                          gridTemplateColumns:
+                            "repeat(auto-fit, minmax(200px, 1fr))",
+                          alignItems: "end",
+                        }}
+                      >
+                        <label style={{ display: "grid", gap: "0.35rem" }}>
+                          Title
+                          <input
+                            type="text"
+                            value={draft.title}
+                            onChange={(event) =>
+                              updateTaskDraft(task.id, {
+                                title: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <label style={{ display: "grid", gap: "0.35rem" }}>
+                          Times per day
+                          <input
+                            type="number"
+                            min={1}
+                            value={draft.timesPerDay}
+                            onChange={(event) =>
+                              updateTaskDraft(task.id, {
+                                timesPerDay: event.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: "0.5rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => saveTaskEdits(task)}
+                            disabled={!hasChanges}
+                          >
+                            Update
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeTask(task.id)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                        {describeSchedule(task)}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                        Active from {task.startDate}
+                        {task.endDate ? ` to ${task.endDate}` : ""}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -1012,6 +1209,7 @@ export default function HomePage() {
                             Number(event.target.value),
                           )
                         }
+                        onFocus={(event) => event.target.select()}
                         disabled={!editable}
                         style={{ width: "90px" }}
                       />

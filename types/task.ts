@@ -53,6 +53,7 @@ export type Task = {
   title: string;
   frequency: Frequency;
   schedule: TaskSchedule;
+  timesPerDay?: number;
   startDate: string;
   endDate?: string;
   maxOccurrences?: number;

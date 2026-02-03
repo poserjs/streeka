@@ -48,7 +48,7 @@
             },
             "timesPerDay": {
               "type": "integer",
-              "minimum": 2,
+              "minimum": 1,
               "description": "Number of times the task should occur each day."
             }
           }
@@ -149,6 +149,11 @@
       "type": "string",
       "format": "date",
       "description": "ISO-8601 start date for the schedule."
+    },
+    "timesPerDay": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Optional number of times the task should occur on a scheduled day."
     },
     "endDate": {
       "type": "string",

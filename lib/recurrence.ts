@@ -85,6 +85,19 @@ const getNthWeekdayDate = (
   return null;
 };
 
+export const getTaskTimesPerDay = (task: Task): number => {
+  const fallback =
+    task.schedule.type === "n-times-daily"
+      ? task.schedule.timesPerDay
+      : undefined;
+  const raw = task.timesPerDay ?? fallback;
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric) || numeric < 1) {
+    return 1;
+  }
+  return Math.floor(numeric);
+};
+
 const occursOnDate = (task: Task, date: Date, startDate: Date): boolean => {
   const { schedule } = task;
   const dateWeekday = date.getUTCDay();
@@ -129,11 +142,7 @@ const occursOnDate = (task: Task, date: Date, startDate: Date): boolean => {
 };
 
 const occurrencesOnDate = (task: Task): number => {
-  if (task.schedule.type === "n-times-daily") {
-    return Math.max(0, task.schedule.timesPerDay);
-  }
-
-  return 1;
+  return getTaskTimesPerDay(task);
 };
 
 const countOccurrencesThroughDate = (task: Task, date: Date): number => {
