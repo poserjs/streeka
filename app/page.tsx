@@ -112,6 +112,8 @@ const describeSchedule = (task: Task): string => {
           ? ` every ${schedule.monthInterval} months`
           : ""
       }${timesSuffix}`;
+    case "one-time-rollover":
+      return `One-time from ${task.startDate} until completed`;
     default:
       return "Custom schedule";
   }
@@ -475,6 +477,8 @@ export default function HomePage() {
           monthInterval:
             Number(monthInterval) > 1 ? Number(monthInterval) : undefined,
         };
+      case "one-time-rollover":
+        return { type: "one-time-rollover" };
       case "daily":
       default:
         return { type: "daily" };
@@ -910,6 +914,9 @@ export default function HomePage() {
                 <option value="days-of-week">Specific weekdays</option>
                 <option value="nth-weekday">Nth weekday of month</option>
                 <option value="day-of-month">Day of month</option>
+                <option value="one-time-rollover">
+                  No recurrence (rollover until done)
+                </option>
               </select>
             </label>
             <label style={{ display: "grid", gap: "0.35rem" }}>
