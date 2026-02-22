@@ -61,6 +61,10 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "progress", label: "Progress" },
 ];
 
+const TIMES_PER_DAY_OPTIONS = Array.from({ length: 10 }, (_, index) =>
+  String(index + 1),
+);
+
 const buildDailyCompletion = (
   tasks: Task[],
   existing: DailyCompletion | undefined,
@@ -395,7 +399,10 @@ export default function HomePage() {
       return;
     }
 
-    const nextTimesPerDay = Math.max(1, Number(draft.timesPerDay) || 1);
+    const nextTimesPerDay = Math.min(
+      10,
+      Math.max(1, Number(draft.timesPerDay) || 1),
+    );
     updateTask(task.id, {
       title: nextTitle,
       timesPerDay: nextTimesPerDay,
@@ -488,7 +495,7 @@ export default function HomePage() {
       return;
     }
 
-    const normalizedTimesPerDay = Math.max(1, Number(timesPerDay) || 1);
+    const normalizedTimesPerDay = Math.min(10, Math.max(1, timesPerDay));
     const schedule = buildSchedule(normalizedTimesPerDay);
     const task: Task = {
       id: crypto.randomUUID(),
@@ -914,12 +921,16 @@ export default function HomePage() {
             </label>
             <label style={{ display: "grid", gap: "0.35rem" }}>
               Times per day
-              <input
-                type="number"
-                min={1}
+              <select
                 value={timesPerDay}
                 onChange={(event) => setTimesPerDay(Number(event.target.value))}
-              />
+              >
+                {TIMES_PER_DAY_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </label>
             {scheduleType === "days-of-week" ? (
               <fieldset
@@ -1083,16 +1094,20 @@ export default function HomePage() {
                         </label>
                         <label style={{ display: "grid", gap: "0.35rem" }}>
                           Times per day
-                          <input
-                            type="number"
-                            min={1}
+                          <select
                             value={draft.timesPerDay}
                             onChange={(event) =>
                               updateTaskDraft(task.id, {
                                 timesPerDay: event.target.value,
                               })
                             }
-                          />
+                          >
+                            {TIMES_PER_DAY_OPTIONS.map((option) => (
+                              <option key={option} value={option}>
+                                {option}
+                              </option>
+                            ))}
+                          </select>
                         </label>
                         <div
                           style={{
