@@ -12,7 +12,8 @@ export type Frequency =
   | "n-times-daily"
   | "days-of-week"
   | "nth-weekday"
-  | "day-of-month";
+  | "day-of-month"
+  | "one-time-rollover";
 
 export type DailySchedule = {
   type: "daily";
@@ -41,12 +42,17 @@ export type DayOfMonthSchedule = {
   monthInterval?: number;
 };
 
+export type OneTimeRolloverSchedule = {
+  type: "one-time-rollover";
+};
+
 export type TaskSchedule =
   | DailySchedule
   | NTimesDailySchedule
   | DaysOfWeekSchedule
   | NthWeekdaySchedule
-  | DayOfMonthSchedule;
+  | DayOfMonthSchedule
+  | OneTimeRolloverSchedule;
 
 export type Task = {
   id: string;
