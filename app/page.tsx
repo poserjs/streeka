@@ -143,13 +143,17 @@ const getProgressPercentage = (summary: CompletionSummary): number => {
   );
 };
 
-const formatWeekday = (dateKey: string): string => {
+const formatDateHeading = (dateKey: string): string => {
   const date = parseDateKey(dateKey);
   if (!date) {
     return "";
   }
 
-  return new Intl.DateTimeFormat(undefined, { weekday: "long" }).format(date);
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    weekday: "long",
+  }).format(date);
+
+  return `${weekday}, ${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 };
 
 export default function HomePage() {
@@ -678,12 +682,9 @@ export default function HomePage() {
 
       {activeTab === "today" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>Today</h2>
-          {todayKey ? (
-            <p style={{ color: "#6c757d" }}>
-              Date: {todayKey} ({formatWeekday(todayKey)})
-            </p>
-          ) : null}
+          <h2 style={{ fontSize: "1.1rem" }}>
+            {todayKey ? `Today: ${formatDateHeading(todayKey)}` : "Today"}
+          </h2>
           <div
             style={{
               display: "grid",
@@ -804,12 +805,11 @@ export default function HomePage() {
 
       {activeTab === "yesterday" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>Yesterday</h2>
-          {yesterdayKey ? (
-            <p style={{ color: "#6c757d" }}>
-              Date: {yesterdayKey} ({formatWeekday(yesterdayKey)})
-            </p>
-          ) : null}
+          <h2 style={{ fontSize: "1.1rem" }}>
+            {yesterdayKey
+              ? `Yesterday: ${formatDateHeading(yesterdayKey)}`
+              : "Yesterday"}
+          </h2>
           {yesterdayTasks.length === 0 ? (
             <p>No tasks scheduled for yesterday.</p>
           ) : (
