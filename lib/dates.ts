@@ -1,5 +1,12 @@
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
+const displayDateFormatter = new Intl.DateTimeFormat("en-US", {
+  weekday: "long",
+  month: "numeric",
+  day: "numeric",
+  year: "numeric",
+});
+
 const pad = (value: number): string => value.toString().padStart(2, "0");
 
 export const formatDateKey = (date: Date): string => {
@@ -26,6 +33,15 @@ export const parseDateKey = (value: string): Date | null => {
   }
 
   return new Date(year, month - 1, day);
+};
+
+export const formatDateWithWeekday = (dateKey: string): string => {
+  const date = parseDateKey(dateKey);
+  if (!date) {
+    return dateKey;
+  }
+
+  return displayDateFormatter.format(date);
 };
 
 export const compareDateKeys = (left: string, right: string): number => {
