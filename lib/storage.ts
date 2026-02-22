@@ -17,6 +17,17 @@ const TASKS_STORAGE_KEY = "streeka.tasks";
 const COMPLETIONS_STORAGE_KEY = "streeka.completions";
 const LAST_ACTIVE_DATE_KEY = "streeka.lastActiveDate";
 
+const LEGACY_TASKS_STORAGE_KEYS = ["tasks", "streekaTasks"];
+const LEGACY_COMPLETIONS_STORAGE_KEYS = [
+  "completions",
+  "dailyCompletions",
+  "streekaCompletions",
+];
+const LEGACY_LAST_ACTIVE_DATE_KEYS = [
+  "lastActiveDate",
+  "streeka.last-active-date",
+];
+
 const CURRENT_TASKS_VERSION = 1;
 const CURRENT_COMPLETIONS_VERSION = 1;
 
@@ -147,7 +158,11 @@ export const readTasks = (): Task[] => {
     return [];
   }
 
-  const raw = storage.getItem(TASKS_STORAGE_KEY);
+  const raw =
+    storage.getItem(TASKS_STORAGE_KEY) ??
+    LEGACY_TASKS_STORAGE_KEYS.map((key) => storage.getItem(key)).find(
+      (value): value is string => Boolean(value),
+    );
   if (!raw) {
     return [];
   }
@@ -182,7 +197,11 @@ export const readCompletions = (): DailyCompletions => {
     return {};
   }
 
-  const raw = storage.getItem(COMPLETIONS_STORAGE_KEY);
+  const raw =
+    storage.getItem(COMPLETIONS_STORAGE_KEY) ??
+    LEGACY_COMPLETIONS_STORAGE_KEYS.map((key) => storage.getItem(key)).find(
+      (value): value is string => Boolean(value),
+    );
   if (!raw) {
     return {};
   }
@@ -217,7 +236,11 @@ export const readLastActiveDate = (): string | null => {
     return null;
   }
 
-  const value = storage.getItem(LAST_ACTIVE_DATE_KEY);
+  const value =
+    storage.getItem(LAST_ACTIVE_DATE_KEY) ??
+    LEGACY_LAST_ACTIVE_DATE_KEYS.map((key) => storage.getItem(key)).find(
+      (entry): entry is string => Boolean(entry),
+    );
   if (!value) {
     return null;
   }
