@@ -1,0 +1,50 @@
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f8f9fa;
+  --surface-border: #e0e0e0;
+  --text: #212529;
+  --text-muted: #6c757d;
+  --success: #2d6a4f;
+  --danger: #9b2226;
+  --tab-active-bg: #2d6a4f;
+  --tab-active-text: #ffffff;
+  --tab-bg: #f8f9fa;
+  --tab-text: #212529;
+  --tab-border: #ced4da;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101418;
+  --surface: #1a222b;
+  --surface-border: #2f3b47;
+  --text: #e6edf3;
+  --text-muted: #9caab8;
+  --success: #63d297;
+  --danger: #ff8a8a;
+  --tab-active-bg: #63d297;
+  --tab-active-text: #0f1712;
+  --tab-bg: #1a222b;
+  --tab-text: #e6edf3;
+  --tab-border: #2f3b47;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+input,
+select,
+button,
+textarea {
+  font: inherit;
+}

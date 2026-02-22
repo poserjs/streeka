@@ -26,6 +26,8 @@ type DailyCompletion = Record<string, number>;
 
 type TabKey = "today" | "yesterday" | "schedule" | "history" | "progress";
 
+type Theme = "light" | "dark";
+
 type CompletionSummary = {
   totalOccurrences: number;
   completedOccurrences: number;
@@ -173,6 +175,7 @@ export default function HomePage() {
     Record<string, { title: string; timesPerDay: string }>
   >({});
   const [activeTab, setActiveTab] = useState<TabKey>("today");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const storedTasks = readTasks();
@@ -227,6 +230,17 @@ export default function HomePage() {
       );
     }
   }, []);
+  useEffect(() => {
+    const storedTheme = window.localStorage.getItem("streeka-theme");
+    if (storedTheme === "light" || storedTheme === "dark") {
+      setTheme(storedTheme);
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("streeka-theme", theme);
+  }, [theme]);
 
   const availableDateKeys = useMemo(() => {
     const keys = Object.keys(completions);
@@ -598,22 +612,67 @@ export default function HomePage() {
   );
 
   return (
-    <main style={{ padding: "2rem", fontFamily: "system-ui, sans-serif" }}>
-      <h1>Streeka</h1>
+    <main
+      style={{
+        padding: "2rem",
+        fontFamily: "system-ui, sans-serif",
+        backgroundColor: "var(--bg)",
+        color: "var(--text)",
+        minHeight: "100vh",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "1rem",
+          flexWrap: "wrap",
+        }}
+      >
+        <h1 style={{ margin: 0 }}>Streeka</h1>
+        <label
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.5rem",
+            fontSize: "0.9rem",
+          }}
+        >
+          Theme
+          <button
+            type="button"
+            onClick={() =>
+              setTheme((current) => (current === "light" ? "dark" : "light"))
+            }
+            aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}
+            style={{
+              border: "1px solid var(--tab-border)",
+              borderRadius: "999px",
+              backgroundColor: "var(--tab-bg)",
+              color: "var(--tab-text)",
+              padding: "0.35rem 0.75rem",
+              cursor: "pointer",
+            }}
+          >
+            {theme === "light" ? "☀️ Light" : "🌙 Dark"}
+          </button>
+        </label>
+      </div>
       <p>
         Track daily progress for your recurring tasks. Updates are allowed for
         today and yesterday only.
       </p>
       {statusMessage ? (
-        <p style={{ color: "#2d6a4f" }}>{statusMessage}</p>
+        <p style={{ color: "var(--success)" }}>{statusMessage}</p>
       ) : null}
       <section
         style={{
           marginTop: "1.5rem",
           padding: "1rem",
-          border: "1px solid #e0e0e0",
+          border: "1px solid var(--surface-border)",
           borderRadius: "0.75rem",
-          backgroundColor: "#f8f9fa",
+          backgroundColor: "var(--surface)",
         }}
       >
         <h2 style={{ fontSize: "1rem", marginTop: 0 }}>Summary</h2>
@@ -625,25 +684,25 @@ export default function HomePage() {
           }}
         >
           <div>
-            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               Current streak
             </div>
             <strong>{streakSummary.currentStreak} days</strong>
           </div>
           <div>
-            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               Longest streak
             </div>
             <strong>{streakSummary.longestStreak} days</strong>
           </div>
           <div>
-            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               Last 7 days completion
             </div>
             <strong>{streakSummary.last7DaysCompletion}%</strong>
           </div>
           <div>
-            <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
               Last 30 days completion
             </div>
             <strong>{streakSummary.last30DaysCompletion}%</strong>
@@ -667,9 +726,15 @@ export default function HomePage() {
             style={{
               padding: "0.5rem 1rem",
               borderRadius: "999px",
-              border: "1px solid #ced4da",
-              backgroundColor: activeTab === tab.key ? "#2d6a4f" : "#f8f9fa",
-              color: activeTab === tab.key ? "#ffffff" : "#212529",
+              border: "1px solid var(--tab-border)",
+              backgroundColor:
+                activeTab === tab.key
+                  ? "var(--tab-active-bg)"
+                  : "var(--tab-bg)",
+              color:
+                activeTab === tab.key
+                  ? "var(--tab-active-text)"
+                  : "var(--tab-text)",
               fontWeight: activeTab === tab.key ? 600 : 400,
             }}
           >
@@ -692,11 +757,11 @@ export default function HomePage() {
             <div
               style={{
                 padding: "0.75rem",
-                border: "1px solid #e0e0e0",
+                border: "1px solid var(--surface-border)",
                 borderRadius: "0.75rem",
               }}
             >
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 Completion
               </div>
               <strong>{getProgressPercentage(todaySummary)}%</strong>
@@ -704,11 +769,11 @@ export default function HomePage() {
             <div
               style={{
                 padding: "0.75rem",
-                border: "1px solid #e0e0e0",
+                border: "1px solid var(--surface-border)",
                 borderRadius: "0.75rem",
               }}
             >
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 Tasks scheduled
               </div>
               <strong>{todayTasks.length}</strong>
@@ -744,12 +809,17 @@ export default function HomePage() {
                       display: "grid",
                       gap: "0.5rem",
                       padding: "0.75rem 0",
-                      borderBottom: "1px solid #e0e0e0",
+                      borderBottom: "1px solid var(--surface-border)",
                     }}
                   >
                     <div>
                       <strong>{task.title}</strong>
-                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                        }}
+                      >
                         {describeSchedule(task)}
                       </div>
                     </div>
@@ -803,7 +873,7 @@ export default function HomePage() {
         <section style={{ marginTop: "1.5rem" }}>
           <h2 style={{ fontSize: "1.1rem" }}>Yesterday</h2>
           {yesterdayKey ? (
-            <p style={{ color: "#6c757d" }}>Date: {yesterdayKey}</p>
+            <p style={{ color: "var(--text-muted)" }}>Date: {yesterdayKey}</p>
           ) : null}
           {yesterdayTasks.length === 0 ? (
             <p>No tasks scheduled for yesterday.</p>
@@ -817,12 +887,17 @@ export default function HomePage() {
                     alignItems: "center",
                     gap: "0.75rem",
                     padding: "0.5rem 0",
-                    borderBottom: "1px solid #e0e0e0",
+                    borderBottom: "1px solid var(--surface-border)",
                   }}
                 >
                   <div style={{ flex: 1 }}>
                     <strong>{task.title}</strong>
-                    <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                    <div
+                      style={{
+                        fontSize: "0.85rem",
+                        color: "var(--text-muted)",
+                      }}
+                    >
                       Schedule: {describeSchedule(task)}
                     </div>
                   </div>
@@ -849,12 +924,12 @@ export default function HomePage() {
             </ul>
           )}
           {!isEditableDate(yesterdayKey, todayKey) ? (
-            <p style={{ color: "#9b2226", marginTop: "0.75rem" }}>
+            <p style={{ color: "var(--danger)", marginTop: "0.75rem" }}>
               Updates are locked for dates older than yesterday.
             </p>
           ) : null}
           {yesterdayTasks.length ? (
-            <p style={{ marginTop: "0.75rem", color: "#6c757d" }}>
+            <p style={{ marginTop: "0.75rem", color: "var(--text-muted)" }}>
               Completion: {getProgressPercentage(yesterdaySummary)}%
             </p>
           ) : null}
@@ -941,7 +1016,10 @@ export default function HomePage() {
             </label>
             {scheduleType === "days-of-week" ? (
               <fieldset
-                style={{ border: "1px solid #e0e0e0", padding: "0.75rem" }}
+                style={{
+                  border: "1px solid var(--surface-border)",
+                  padding: "0.75rem",
+                }}
               >
                 <legend>Select weekdays</legend>
                 <div
@@ -1073,7 +1151,7 @@ export default function HomePage() {
                       key={task.id}
                       style={{
                         padding: "0.75rem 0",
-                        borderBottom: "1px solid #e0e0e0",
+                        borderBottom: "1px solid var(--surface-border)",
                         display: "grid",
                         gap: "0.5rem",
                       }}
@@ -1138,10 +1216,20 @@ export default function HomePage() {
                           </button>
                         </div>
                       </div>
-                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                        }}
+                      >
                         {describeSchedule(task)}
                       </div>
-                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                        }}
+                      >
                         Active from {task.startDate}
                         {task.endDate ? ` to ${task.endDate}` : ""}
                       </div>
@@ -1191,7 +1279,7 @@ export default function HomePage() {
             ))}
           </select>
           {!editable && selectedDateKey ? (
-            <p style={{ color: "#9b2226", marginTop: "0.75rem" }}>
+            <p style={{ color: "var(--danger)", marginTop: "0.75rem" }}>
               Updates are locked for dates older than yesterday.
             </p>
           ) : null}
@@ -1209,12 +1297,17 @@ export default function HomePage() {
                       alignItems: "center",
                       gap: "0.75rem",
                       padding: "0.5rem 0",
-                      borderBottom: "1px solid #e0e0e0",
+                      borderBottom: "1px solid var(--surface-border)",
                     }}
                   >
                     <div style={{ flex: 1 }}>
                       <strong>{task.title}</strong>
-                      <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                        }}
+                      >
                         Schedule: {describeSchedule(task)}
                       </div>
                     </div>
@@ -1257,15 +1350,15 @@ export default function HomePage() {
             <div
               style={{
                 padding: "0.75rem",
-                border: "1px solid #e0e0e0",
+                border: "1px solid var(--surface-border)",
                 borderRadius: "0.75rem",
               }}
             >
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 Today completion
               </div>
               <strong>{getProgressPercentage(todaySummary)}%</strong>
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 {todaySummary.completedOccurrences} of{" "}
                 {todaySummary.totalOccurrences}
               </div>
@@ -1273,15 +1366,15 @@ export default function HomePage() {
             <div
               style={{
                 padding: "0.75rem",
-                border: "1px solid #e0e0e0",
+                border: "1px solid var(--surface-border)",
                 borderRadius: "0.75rem",
               }}
             >
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 Yesterday completion
               </div>
               <strong>{getProgressPercentage(yesterdaySummary)}%</strong>
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 {yesterdaySummary.completedOccurrences} of{" "}
                 {yesterdaySummary.totalOccurrences}
               </div>
@@ -1289,11 +1382,11 @@ export default function HomePage() {
             <div
               style={{
                 padding: "0.75rem",
-                border: "1px solid #e0e0e0",
+                border: "1px solid var(--surface-border)",
                 borderRadius: "0.75rem",
               }}
             >
-              <div style={{ fontSize: "0.85rem", color: "#6c757d" }}>
+              <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
                 Last 7 days completion
               </div>
               <strong>{streakSummary.last7DaysCompletion}%</strong>
@@ -1307,14 +1400,14 @@ export default function HomePage() {
                   key={entry.dateKey}
                   style={{
                     padding: "0.5rem 0",
-                    borderBottom: "1px solid #e0e0e0",
+                    borderBottom: "1px solid var(--surface-border)",
                     display: "flex",
                     justifyContent: "space-between",
                     gap: "1rem",
                   }}
                 >
                   <span>{entry.dateKey}</span>
-                  <span style={{ color: "#6c757d" }}>
+                  <span style={{ color: "var(--text-muted)" }}>
                     {getProgressPercentage(entry.summary)}% (
                     {entry.summary.completedOccurrences}/
                     {entry.summary.totalOccurrences})
