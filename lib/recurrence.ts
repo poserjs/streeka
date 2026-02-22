@@ -106,6 +106,8 @@ const occursOnDate = (task: Task, date: Date, startDate: Date): boolean => {
     case "daily":
     case "n-times-daily":
       return true;
+    case "one-time-rollover":
+      return true;
     case "days-of-week":
       return schedule.days.some((day) => WEEKDAY_INDEX[day] === dateWeekday);
     case "nth-weekday": {

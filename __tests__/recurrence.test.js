@@ -54,3 +54,23 @@ test("recurrence handles nth-weekday schedules on edge weeks", () => {
   assert.equal(lastFriday.length, 1);
   assert.equal(notLastFriday.length, 0);
 });
+
+test("one-time rollover tasks remain scheduled after start date", () => {
+  const tasks = [
+    {
+      id: "task-rollover",
+      title: "One-time cleanup",
+      frequency: "one-time-rollover",
+      schedule: { type: "one-time-rollover" },
+      startDate: "2024-01-10",
+    },
+  ];
+
+  const beforeStart = getTasksForDate(tasks, "2024-01-09");
+  const onStart = getTasksForDate(tasks, "2024-01-10");
+  const afterStart = getTasksForDate(tasks, "2024-04-01");
+
+  assert.equal(beforeStart.length, 0);
+  assert.equal(onStart.length, 1);
+  assert.equal(afterStart.length, 1);
+});
