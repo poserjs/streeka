@@ -15,6 +15,7 @@ import {
 import {
   compareDateKeys,
   formatDateKey,
+  formatDateWithWeekday,
   getTodayKey,
   getYesterdayKey,
   isEditableDate,
@@ -746,6 +747,11 @@ export default function HomePage() {
       {activeTab === "today" ? (
         <section style={{ marginTop: "1.5rem" }}>
           <h2 style={{ fontSize: "1.1rem" }}>Today</h2>
+          {todayKey ? (
+            <p style={{ color: "var(--text-muted)" }}>
+              Date: {formatDateWithWeekday(todayKey)}
+            </p>
+          ) : null}
           <div
             style={{
               display: "grid",
@@ -873,7 +879,9 @@ export default function HomePage() {
         <section style={{ marginTop: "1.5rem" }}>
           <h2 style={{ fontSize: "1.1rem" }}>Yesterday</h2>
           {yesterdayKey ? (
-            <p style={{ color: "var(--text-muted)" }}>Date: {yesterdayKey}</p>
+            <p style={{ color: "var(--text-muted)" }}>
+              Date: {formatDateWithWeekday(yesterdayKey)}
+            </p>
           ) : null}
           {yesterdayTasks.length === 0 ? (
             <p>No tasks scheduled for yesterday.</p>
