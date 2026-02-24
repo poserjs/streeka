@@ -152,6 +152,64 @@ const getProgressPercentage = (summary: CompletionSummary): number => {
   );
 };
 
+const calculateTaskCurrentStreak = (
+  task: Task,
+  completions: DailyCompletions,
+  todayKey: string,
+): number => {
+  const todayDate = parseDateKey(todayKey);
+  const taskStartDate = parseDateKey(task.startDate);
+  if (!todayDate || !taskStartDate) {
+    return 0;
+  }
+
+  const taskEndDate = task.endDate ? parseDateKey(task.endDate) : null;
+  const startFrom =
+    taskEndDate && taskEndDate.getTime() < todayDate.getTime()
+      ? taskEndDate
+      : todayDate;
+
+  let streak = 0;
+  for (
+    let current = new Date(startFrom.getTime());
+    current.getTime() >= taskStartDate.getTime();
+    current = new Date(current.getTime() - 24 * 60 * 60 * 1000)
+  ) {
+    const dateKey = formatDateKey(current);
+    const isScheduled = getTasksForDate([task], dateKey).length > 0;
+    if (!isScheduled) {
+      continue;
+    }
+
+    const occurrences = getOccurrenceCount(task);
+    const completed = Math.min(
+      completions[dateKey]?.[task.id] ?? 0,
+      occurrences,
+    );
+    if (completed < occurrences) {
+      break;
+    }
+
+    streak += 1;
+  }
+
+  return streak;
+};
+
+const formatTaskStreakLabel = (task: Task, streak: number): string => {
+  if (streak === 0) {
+    return "No streak yet";
+  }
+
+  const isDailyTask =
+    task.schedule.type === "daily" || task.schedule.type === "n-times-daily";
+  if (isDailyTask) {
+    return `${streak} ${streak === 1 ? "day" : "days"} in a row`;
+  }
+
+  return `${streak} ${streak === 1 ? "run" : "runs"} in a row`;
+};
+
 export default function HomePage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [completions, setCompletions] = useState<DailyCompletions>({});
@@ -182,7 +240,6 @@ export default function HomePage() {
     const storedTasks = readTasks();
     const storedCompletions = readCompletions();
     const today = getTodayKey();
-    const yesterday = getYesterdayKey();
     const lastActive = readLastActiveDate();
     const tasksForToday = getTasksForDate(storedTasks, today);
 
@@ -201,18 +258,12 @@ export default function HomePage() {
         [today]: nextTodayCompletion,
       };
       writeCompletions(nextCompletions);
-      setStatusMessage(
-        lastActive
-          ? "New day detected — today's progress has been initialized."
-          : "Today's progress has been initialized.",
-      );
     } else if (Object.keys(nextTodayCompletion).length) {
       nextCompletions = {
         ...storedCompletions,
         [today]: nextTodayCompletion,
       };
       writeCompletions(nextCompletions);
-      setStatusMessage("Today's progress has been refreshed.");
     }
 
     writeLastActiveDate(today);
@@ -222,14 +273,6 @@ export default function HomePage() {
     setTodayKey(today);
     setSelectedDateKey(today);
     setTaskStartDate(today);
-
-    if (!nextCompletions[yesterday]) {
-      setStatusMessage((prev) =>
-        prev
-          ? `${prev} Yesterday is read-only unless it was already tracked.`
-          : "Yesterday is read-only unless it was already tracked.",
-      );
-    }
   }, []);
   useEffect(() => {
     const storedTheme = window.localStorage.getItem("streeka-theme");
@@ -612,6 +655,23 @@ export default function HomePage() {
     [tasks, completions, todayKey],
   );
 
+  const taskStreaks = useMemo(() => {
+    if (!todayKey) {
+      return [] as Array<{ task: Task; streak: number }>;
+    }
+
+    return tasks
+      .map((task) => ({
+        task,
+        streak: calculateTaskCurrentStreak(task, completions, todayKey),
+      }))
+      .sort(
+        (left, right) =>
+          right.streak - left.streak ||
+          left.task.title.localeCompare(right.task.title),
+      );
+  }, [tasks, completions, todayKey]);
+
   return (
     <main
       style={{
@@ -632,15 +692,12 @@ export default function HomePage() {
         }}
       >
         <h1 style={{ margin: 0 }}>Streeka</h1>
-        <label
+        <div
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "0.5rem",
-            fontSize: "0.9rem",
           }}
         >
-          Theme
           <button
             type="button"
             onClick={() =>
@@ -658,58 +715,11 @@ export default function HomePage() {
           >
             {theme === "light" ? "☀️ Light" : "🌙 Dark"}
           </button>
-        </label>
+        </div>
       </div>
-      <p>
-        Track daily progress for your recurring tasks. Updates are allowed for
-        today and yesterday only.
-      </p>
       {statusMessage ? (
         <p style={{ color: "var(--success)" }}>{statusMessage}</p>
       ) : null}
-      <section
-        style={{
-          marginTop: "1.5rem",
-          padding: "1rem",
-          border: "1px solid var(--surface-border)",
-          borderRadius: "0.75rem",
-          backgroundColor: "var(--surface)",
-        }}
-      >
-        <h2 style={{ fontSize: "1rem", marginTop: 0 }}>Summary</h2>
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              Current streak
-            </div>
-            <strong>{streakSummary.currentStreak} days</strong>
-          </div>
-          <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              Longest streak
-            </div>
-            <strong>{streakSummary.longestStreak} days</strong>
-          </div>
-          <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              Last 7 days completion
-            </div>
-            <strong>{streakSummary.last7DaysCompletion}%</strong>
-          </div>
-          <div>
-            <div style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>
-              Last 30 days completion
-            </div>
-            <strong>{streakSummary.last30DaysCompletion}%</strong>
-          </div>
-        </div>
-      </section>
 
       <nav
         style={{
@@ -746,17 +756,16 @@ export default function HomePage() {
 
       {activeTab === "today" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>Today</h2>
           {todayKey ? (
             <p style={{ color: "var(--text-muted)" }}>
-              Date: {formatDateWithWeekday(todayKey)}
+              {formatDateWithWeekday(todayKey)}
             </p>
           ) : null}
           <div
             style={{
               display: "grid",
-              gap: "0.5rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: "0.75rem",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
               marginBottom: "1rem",
             }}
           >
@@ -877,58 +886,81 @@ export default function HomePage() {
 
       {activeTab === "yesterday" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>Yesterday</h2>
           {yesterdayKey ? (
             <p style={{ color: "var(--text-muted)" }}>
-              Date: {formatDateWithWeekday(yesterdayKey)}
+              {formatDateWithWeekday(yesterdayKey)}
             </p>
           ) : null}
           {yesterdayTasks.length === 0 ? (
             <p>No tasks scheduled for yesterday.</p>
           ) : (
             <ul style={{ listStyle: "none", padding: 0 }}>
-              {yesterdayTasks.map((task) => (
-                <li
-                  key={task.id}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    padding: "0.5rem 0",
-                    borderBottom: "1px solid var(--surface-border)",
-                  }}
-                >
-                  <div style={{ flex: 1 }}>
-                    <strong>{task.title}</strong>
+              {yesterdayTasks.map((task) => {
+                const occurrences = getOccurrenceCount(task);
+                const completed = yesterdayCompletion[task.id] ?? 0;
+
+                return (
+                  <li
+                    key={task.id}
+                    style={{
+                      display: "grid",
+                      gap: "0.5rem",
+                      padding: "0.5rem 0",
+                      borderBottom: "1px solid var(--surface-border)",
+                    }}
+                  >
+                    <div>
+                      <strong>{task.title}</strong>
+                      <div
+                        style={{
+                          fontSize: "0.85rem",
+                          color: "var(--text-muted)",
+                        }}
+                      >
+                        {describeSchedule(task)}
+                      </div>
+                    </div>
                     <div
                       style={{
-                        fontSize: "0.85rem",
-                        color: "var(--text-muted)",
+                        display: "flex",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
                       }}
                     >
-                      Schedule: {describeSchedule(task)}
+                      {Array.from({ length: occurrences }, (_, index) => {
+                        const checkboxId = `${task.id}-yesterday-occurrence-${index}`;
+                        const isChecked = index < completed;
+                        return (
+                          <label
+                            key={checkboxId}
+                            htmlFor={checkboxId}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "0.35rem",
+                            }}
+                          >
+                            <input
+                              id={checkboxId}
+                              type="checkbox"
+                              checked={isChecked}
+                              disabled={!isEditableDate(yesterdayKey, todayKey)}
+                              onChange={(event) =>
+                                updateCompletionForDate(
+                                  yesterdayKey,
+                                  task.id,
+                                  event.target.checked ? index + 1 : index,
+                                )
+                              }
+                            />
+                            {occurrences > 1 ? `#${index + 1}` : "Done"}
+                          </label>
+                        );
+                      })}
                     </div>
-                  </div>
-                  <label style={{ display: "flex", flexDirection: "column" }}>
-                    <span style={{ fontSize: "0.85rem" }}>Completions</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={yesterdayCompletion[task.id] ?? 0}
-                      onChange={(event) =>
-                        updateCompletionForDate(
-                          yesterdayKey,
-                          task.id,
-                          Number(event.target.value),
-                        )
-                      }
-                      onFocus={(event) => event.target.select()}
-                      disabled={!isEditableDate(yesterdayKey, todayKey)}
-                      style={{ width: "90px" }}
-                    />
-                  </label>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {!isEditableDate(yesterdayKey, todayKey) ? (
@@ -946,7 +978,6 @@ export default function HomePage() {
 
       {activeTab === "schedule" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>Schedule</h2>
           <form
             onSubmit={handleCreateTask}
             style={{
@@ -1138,7 +1169,6 @@ export default function HomePage() {
             </button>
           </form>
           <div style={{ marginTop: "1.5rem" }}>
-            <h3 style={{ fontSize: "1rem" }}>All scheduled tasks</h3>
             {tasks.length === 0 ? (
               <p>No tasks yet. Add your first habit above.</p>
             ) : (
@@ -1252,7 +1282,6 @@ export default function HomePage() {
 
       {activeTab === "history" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>History</h2>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button type="button" onClick={() => setSelectedDateKey(todayKey)}>
               Today
@@ -1264,17 +1293,12 @@ export default function HomePage() {
               Yesterday
             </button>
           </div>
-          <label
-            htmlFor="date-select"
-            style={{ display: "block", marginTop: "0.75rem" }}
-          >
-            Review date
-          </label>
           <select
             id="date-select"
+            aria-label="Review date"
             value={selectedDateKey}
             onChange={(event) => setSelectedDateKey(event.target.value)}
-            style={{ marginTop: "0.5rem", minWidth: "200px" }}
+            style={{ marginTop: "0.75rem", minWidth: "200px" }}
           >
             {availableDateKeys.map((dateKey) => (
               <option key={dateKey} value={dateKey}>
@@ -1292,7 +1316,6 @@ export default function HomePage() {
             </p>
           ) : null}
           <div style={{ marginTop: "1.5rem" }}>
-            <h3 style={{ fontSize: "1rem" }}>Tasks for {selectedDateKey}</h3>
             {tasksForSelectedDate.length === 0 ? (
               <p>No tasks scheduled for this date.</p>
             ) : (
@@ -1316,7 +1339,7 @@ export default function HomePage() {
                           color: "var(--text-muted)",
                         }}
                       >
-                        Schedule: {describeSchedule(task)}
+                        {describeSchedule(task)}
                       </div>
                     </div>
                     <label style={{ display: "flex", flexDirection: "column" }}>
@@ -1347,7 +1370,6 @@ export default function HomePage() {
 
       {activeTab === "progress" ? (
         <section style={{ marginTop: "1.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>Progress</h2>
           <div
             style={{
               display: "grid",
@@ -1401,7 +1423,37 @@ export default function HomePage() {
             </div>
           </div>
           <div style={{ marginTop: "1.5rem" }}>
-            <h3 style={{ fontSize: "1rem" }}>Recent days</h3>
+            {taskStreaks.length === 0 ? (
+              <p>No tasks yet.</p>
+            ) : (
+              <ul
+                style={{
+                  listStyle: "none",
+                  padding: 0,
+                  marginBottom: "1.5rem",
+                }}
+              >
+                {taskStreaks.map(({ task, streak }) => (
+                  <li
+                    key={task.id}
+                    style={{
+                      padding: "0.5rem 0",
+                      borderBottom: "1px solid var(--surface-border)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: "1rem",
+                    }}
+                  >
+                    <span>{task.title}</span>
+                    <span style={{ color: "var(--text-muted)" }}>
+                      {formatTaskStreakLabel(task, streak)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div style={{ marginTop: "1.5rem" }}>
             <ul style={{ listStyle: "none", padding: 0 }}>
               {recentSummaries.map((entry) => (
                 <li
