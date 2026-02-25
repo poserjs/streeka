@@ -74,3 +74,30 @@ test("one-time rollover tasks remain scheduled after start date", () => {
   assert.equal(onStart.length, 1);
   assert.equal(afterStart.length, 1);
 });
+
+test("one-time rollover tasks stop after completion date", () => {
+  const tasks = [
+    {
+      id: "task-rollover-complete",
+      title: "One-time cleanup",
+      frequency: "one-time-rollover",
+      schedule: { type: "one-time-rollover" },
+      timesPerDay: 1,
+      startDate: "2024-01-10",
+    },
+  ];
+
+  const completions = {
+    "2024-01-12": {
+      "task-rollover-complete": 1,
+    },
+  };
+
+  const beforeCompletion = getTasksForDate(tasks, "2024-01-11", completions);
+  const onCompletion = getTasksForDate(tasks, "2024-01-12", completions);
+  const afterCompletion = getTasksForDate(tasks, "2024-01-13", completions);
+
+  assert.equal(beforeCompletion.length, 1);
+  assert.equal(onCompletion.length, 1);
+  assert.equal(afterCompletion.length, 0);
+});

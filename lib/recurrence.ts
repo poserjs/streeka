@@ -1,4 +1,5 @@
 import type { Task, Weekday } from "../types/task";
+import type { DailyCompletions } from "./storage";
 
 const WEEKDAY_INDEX: Record<Weekday, number> = {
   monday: 1,
@@ -147,6 +148,22 @@ const occurrencesOnDate = (task: Task): number => {
   return getTaskTimesPerDay(task);
 };
 
+const getOneTimeRolloverCompletionDate = (
+  task: Task,
+  completions: DailyCompletions,
+): Date | null => {
+  const requiredOccurrences = occurrencesOnDate(task);
+
+  const completedDates = Object.entries(completions)
+    .filter(
+      ([, completion]) => (completion?.[task.id] ?? 0) >= requiredOccurrences,
+    )
+    .map(([dateKey]) => toUtcDate(dateKey))
+    .sort((left, right) => left.getTime() - right.getTime());
+
+  return completedDates[0] ?? null;
+};
+
 const countOccurrencesThroughDate = (task: Task, date: Date): number => {
   const startDate = toUtcDate(task.startDate);
   if (isAfter(startDate, date)) {
@@ -166,7 +183,11 @@ const countOccurrencesThroughDate = (task: Task, date: Date): number => {
   return total;
 };
 
-export const getTasksForDate = (tasks: Task[], date: Date | string): Task[] => {
+export const getTasksForDate = (
+  tasks: Task[],
+  date: Date | string,
+  completions: DailyCompletions = {},
+): Task[] => {
   const targetDate = toUtcDate(date);
 
   return tasks.filter((task) => {
@@ -185,6 +206,13 @@ export const getTasksForDate = (tasks: Task[], date: Date | string): Task[] => {
 
     if (!occursOnDate(task, targetDate, startDate)) {
       return false;
+    }
+
+    if (task.schedule.type === "one-time-rollover") {
+      const completedOn = getOneTimeRolloverCompletionDate(task, completions);
+      if (completedOn && isAfter(targetDate, completedOn)) {
+        return false;
+      }
     }
 
     if (task.maxOccurrences) {

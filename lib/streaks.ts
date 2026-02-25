@@ -80,7 +80,7 @@ const buildSummaryForDate = (
   dateKey: string,
 ): CompletionSummary => {
   return buildCompletionSummary(
-    getTasksForDate(tasks, dateKey),
+    getTasksForDate(tasks, dateKey, completions),
     completions[dateKey],
   );
 };

@@ -176,7 +176,8 @@ const calculateTaskCurrentStreak = (
     current = new Date(current.getTime() - 24 * 60 * 60 * 1000)
   ) {
     const dateKey = formatDateKey(current);
-    const isScheduled = getTasksForDate([task], dateKey).length > 0;
+    const isScheduled =
+      getTasksForDate([task], dateKey, completions).length > 0;
     if (!isScheduled) {
       continue;
     }
@@ -230,6 +231,8 @@ export default function HomePage() {
   const [monthDay, setMonthDay] = useState("1");
   const [monthInterval, setMonthInterval] = useState("1");
   const [extraTaskTitle, setExtraTaskTitle] = useState("");
+  const [extraTaskRolloverUntilCompleted, setExtraTaskRolloverUntilCompleted] =
+    useState(false);
   const [taskEdits, setTaskEdits] = useState<
     Record<string, { title: string; timesPerDay: string }>
   >({});
@@ -241,7 +244,11 @@ export default function HomePage() {
     const storedCompletions = readCompletions();
     const today = getTodayKey();
     const lastActive = readLastActiveDate();
-    const tasksForToday = getTasksForDate(storedTasks, today);
+    const tasksForToday = getTasksForDate(
+      storedTasks,
+      today,
+      storedCompletions,
+    );
 
     let nextCompletions = storedCompletions;
     const shouldInitializeToday =
@@ -303,8 +310,8 @@ export default function HomePage() {
     if (!selectedDateKey) {
       return [];
     }
-    return getTasksForDate(tasks, selectedDateKey);
-  }, [selectedDateKey, tasks]);
+    return getTasksForDate(tasks, selectedDateKey, completions);
+  }, [selectedDateKey, tasks, completions]);
 
   const selectedCompletion = completions[selectedDateKey] ?? {};
   const editable = Boolean(
@@ -315,8 +322,8 @@ export default function HomePage() {
     if (!todayKey) {
       return [];
     }
-    return getTasksForDate(tasks, todayKey);
-  }, [tasks, todayKey]);
+    return getTasksForDate(tasks, todayKey, completions);
+  }, [tasks, todayKey, completions]);
 
   const yesterdayKey = todayKey ? getYesterdayKey() : "";
 
@@ -324,8 +331,8 @@ export default function HomePage() {
     if (!yesterdayKey) {
       return [];
     }
-    return getTasksForDate(tasks, yesterdayKey);
-  }, [tasks, yesterdayKey]);
+    return getTasksForDate(tasks, yesterdayKey, completions);
+  }, [tasks, yesterdayKey, completions]);
 
   const updateCompletionForDate = (
     dateKey: string,
@@ -589,15 +596,20 @@ export default function HomePage() {
     const task: Task = {
       id: crypto.randomUUID(),
       title: extraTaskTitle.trim(),
-      frequency: "daily",
-      schedule: { type: "daily" },
+      frequency: extraTaskRolloverUntilCompleted
+        ? "one-time-rollover"
+        : "daily",
+      schedule: {
+        type: extraTaskRolloverUntilCompleted ? "one-time-rollover" : "daily",
+      },
       timesPerDay: 1,
       startDate: todayKey,
-      endDate: todayKey,
+      endDate: extraTaskRolloverUntilCompleted ? undefined : todayKey,
     };
 
     addTask(task);
     setExtraTaskTitle("");
+    setExtraTaskRolloverUntilCompleted(false);
     setStatusMessage("Extra task added for today.");
   };
 
@@ -643,7 +655,7 @@ export default function HomePage() {
       return {
         dateKey,
         summary: buildCompletionSummary(
-          getTasksForDate(tasks, dateKey),
+          getTasksForDate(tasks, dateKey, completions),
           completions[dateKey] ?? {},
         ),
       };
@@ -806,6 +818,23 @@ export default function HomePage() {
                 onChange={(event) => setExtraTaskTitle(event.target.value)}
                 placeholder="Add a one-time task"
               />
+            </label>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                marginTop: "1.2rem",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={extraTaskRolloverUntilCompleted}
+                onChange={(event) =>
+                  setExtraTaskRolloverUntilCompleted(event.target.checked)
+                }
+              />
+              Rollover until completed
             </label>
             <button type="submit">Add extra</button>
           </form>
@@ -1035,9 +1064,6 @@ export default function HomePage() {
                 <option value="days-of-week">Specific weekdays</option>
                 <option value="nth-weekday">Nth weekday of month</option>
                 <option value="day-of-month">Day of month</option>
-                <option value="one-time-rollover">
-                  No recurrence (rollover until done)
-                </option>
               </select>
             </label>
             <label style={{ display: "grid", gap: "0.35rem" }}>
@@ -1169,111 +1195,114 @@ export default function HomePage() {
             </button>
           </form>
           <div style={{ marginTop: "1.5rem" }}>
-            {tasks.length === 0 ? (
+            {tasks.filter((task) => task.schedule.type !== "one-time-rollover")
+              .length === 0 ? (
               <p>No tasks yet. Add your first habit above.</p>
             ) : (
               <ul style={{ listStyle: "none", padding: 0 }}>
-                {tasks.map((task) => {
-                  const draft = getTaskDraft(task);
-                  const draftTimes = Math.max(
-                    1,
-                    Number(draft.timesPerDay) || 1,
-                  );
-                  const currentTimes = getTaskTimesPerDay(task);
-                  const hasChanges =
-                    draft.title.trim() !== task.title ||
-                    draftTimes !== currentTimes;
+                {tasks
+                  .filter((task) => task.schedule.type !== "one-time-rollover")
+                  .map((task) => {
+                    const draft = getTaskDraft(task);
+                    const draftTimes = Math.max(
+                      1,
+                      Number(draft.timesPerDay) || 1,
+                    );
+                    const currentTimes = getTaskTimesPerDay(task);
+                    const hasChanges =
+                      draft.title.trim() !== task.title ||
+                      draftTimes !== currentTimes;
 
-                  return (
-                    <li
-                      key={task.id}
-                      style={{
-                        padding: "0.75rem 0",
-                        borderBottom: "1px solid var(--surface-border)",
-                        display: "grid",
-                        gap: "0.5rem",
-                      }}
-                    >
-                      <div
+                    return (
+                      <li
+                        key={task.id}
                         style={{
+                          padding: "0.75rem 0",
+                          borderBottom: "1px solid var(--surface-border)",
                           display: "grid",
                           gap: "0.5rem",
-                          gridTemplateColumns:
-                            "repeat(auto-fit, minmax(200px, 1fr))",
-                          alignItems: "end",
                         }}
                       >
-                        <label style={{ display: "grid", gap: "0.35rem" }}>
-                          Title
-                          <input
-                            type="text"
-                            value={draft.title}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, {
-                                title: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <label style={{ display: "grid", gap: "0.35rem" }}>
-                          Times per day
-                          <select
-                            value={draft.timesPerDay}
-                            onChange={(event) =>
-                              updateTaskDraft(task.id, {
-                                timesPerDay: event.target.value,
-                              })
-                            }
-                          >
-                            {TIMES_PER_DAY_OPTIONS.map((option) => (
-                              <option key={option} value={option}>
-                                {option}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
                         <div
                           style={{
-                            display: "flex",
+                            display: "grid",
                             gap: "0.5rem",
-                            flexWrap: "wrap",
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(200px, 1fr))",
+                            alignItems: "end",
                           }}
                         >
-                          <button
-                            type="button"
-                            onClick={() => saveTaskEdits(task)}
-                            disabled={!hasChanges}
+                          <label style={{ display: "grid", gap: "0.35rem" }}>
+                            Title
+                            <input
+                              type="text"
+                              value={draft.title}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, {
+                                  title: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label style={{ display: "grid", gap: "0.35rem" }}>
+                            Times per day
+                            <select
+                              value={draft.timesPerDay}
+                              onChange={(event) =>
+                                updateTaskDraft(task.id, {
+                                  timesPerDay: event.target.value,
+                                })
+                              }
+                            >
+                              {TIMES_PER_DAY_OPTIONS.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: "0.5rem",
+                              flexWrap: "wrap",
+                            }}
                           >
-                            Update
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeTask(task.id)}
-                          >
-                            Remove
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => saveTaskEdits(task)}
+                              disabled={!hasChanges}
+                            >
+                              Update
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeTask(task.id)}
+                            >
+                              Remove
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        {describeSchedule(task)}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "0.85rem",
-                          color: "var(--text-muted)",
-                        }}
-                      >
-                        Active from {task.startDate}
-                        {task.endDate ? ` to ${task.endDate}` : ""}
-                      </div>
-                    </li>
-                  );
-                })}
+                        <div
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {describeSchedule(task)}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "0.85rem",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          Active from {task.startDate}
+                          {task.endDate ? ` to ${task.endDate}` : ""}
+                        </div>
+                      </li>
+                    );
+                  })}
               </ul>
             )}
           </div>
